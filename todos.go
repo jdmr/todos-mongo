@@ -34,6 +34,7 @@ type Todo struct {
 	Priority    *Priority   `json:"priority" bson:"priority"`
 	CreatedAt   time.Time   `json:"createdAt" bson:"created_at"`
 	UpdatedAt   time.Time   `json:"updatedAt" bson:"updated_at"`
+	DueDate     string      `json:"dueDate" bson:"due_date"`
 }
 
 func getAllTodos(w http.ResponseWriter, r *http.Request) {

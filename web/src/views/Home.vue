@@ -23,6 +23,22 @@
                         <div>Description</div>
                         <div>{{ todo.description }}</div>
                     </div>
+                    <div>
+                        <div>Status</div>
+                        <div>{{ todo.status?.name }}</div>
+                    </div>
+                    <div>
+                        <div>Priority</div>
+                        <div>{{ todo.priority?.name }}</div>
+                    </div>
+                    <div>
+                        <div>User</div>
+                        <div>{{ todo.user?.name }}</div>
+                    </div>
+                    <div>
+                        <div>Due</div>
+                        <div>{{ todo.dueDate }}</div>
+                    </div>
                 </div>
                 <div>
                     <button
@@ -46,6 +62,7 @@ const todos = ref([] as Todo[]);
 const getTodos = async () => {
     const response = await fetch('/api/v1/todos');
     todos.value = await response.json();
+    console.log(todos.value);
 };
 
 const deleteTodo = async (evt: Event, id: string) => {
