@@ -1,86 +1,172 @@
 package main
 
 import (
-	"context"
-	"errors"
+	"encoding/json"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
+type TodoStatus struct {
+	ID   string `json:"id" bson:"_id"`
+	Name string `json:"name" bson:"name"`
+}
+
+type User struct {
+	ID   string `json:"id" bson:"_id"`
+	Name string `json:"name" bson:"name"`
+}
+
+type Priority struct {
+	ID   string `json:"id" bson:"_id"`
+	Name string `json:"name" bson:"name"`
+}
+
 type Todo struct {
-	ID        string    `bson:"_id"`
-	Task      string    `bson:"task"`
-	Completed bool      `bson:"completed"`
-	CreatedAt time.Time `bson:"created_at"`
-	UpdatedAt time.Time `bson:"updated_at"`
+	ID          string      `json:"id" bson:"_id"`
+	Name        string      `json:"name" bson:"name"`
+	Description string      `json:"description" bson:"description"`
+	Status      *TodoStatus `json:"status" bson:"status"`
+	User        *User       `json:"user" bson:"user"`
+	Priority    *Priority   `json:"priority" bson:"priority"`
+	CreatedAt   time.Time   `json:"createdAt" bson:"created_at"`
+	UpdatedAt   time.Time   `json:"updatedAt" bson:"updated_at"`
 }
 
-type TodoDao interface {
-	GetAll() ([]*Todo, error)
-	Get(id string) (*Todo, error)
-	Create(todo *Todo) error
-	Update(todo *Todo) error
-	Delete(id string) error
-}
-
-type TodoDaoImpl struct {
-	client *mongo.Client
-}
-
-func NewTodoDao(client *mongo.Client) TodoDao {
-	return &TodoDaoImpl{client}
-}
-
-func (dao *TodoDaoImpl) GetAll() ([]*Todo, error) {
-	ctx := context.Background()
-	// get all todos from mongodb
-	coll := dao.client.Database("todo").Collection("todos")
-	cur, err := coll.Find(ctx, bson.D{})
+func getAllTodos(w http.ResponseWriter, r *http.Request) {
+	// Get all todos from the database
+	coll := client.Database("tododb").Collection("todos")
+	ctx := r.Context()
+	cursor, err := coll.Find(ctx, nil)
 	if err != nil {
-		return nil, err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	defer cur.Close(ctx)
-
-	// convert to []*Todo
-	var todos []*Todo
-	for cur.Next(ctx) {
-		var todo *Todo
-		if err := cur.Decode(&todo); err != nil {
-			return nil, err
+	defer cursor.Close(ctx)
+	todos := []*Todo{}
+	for cursor.Next(ctx) {
+		t := &Todo{}
+		if err := cursor.Decode(t); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		todos = append(todos, todo)
+		todos = append(todos, t)
 	}
-	return todos, nil
-}
 
-func (dao *TodoDaoImpl) Get(id string) (*Todo, error) {
-	todo := &Todo{}
-	coll := dao.client.Database("todo").Collection("todos")
-	err := coll.FindOne(context.Background(), bson.M{"_id": id}).Decode(todo)
+	// Send the todos as the response
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(todos)
 	if err != nil {
-		return nil, err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	return todo, nil
 }
 
-func (dao *TodoDaoImpl) Create(todo *Todo) error {
-	todo.ID = uuid.New().String()
-	todo.CreatedAt = time.Now()
-	todo.UpdatedAt = time.Now()
-	_, err := dao.client.Database("todo").Collection("todos").InsertOne(context.Background(), todo)
+func createTodo(w http.ResponseWriter, r *http.Request) {
+	// Parse the request body
+	t := &Todo{}
+	err := json.NewDecoder(r.Body).Decode(t)
 	if err != nil {
-		return err
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	return nil
+	t.ID = uuid.New().String()
+
+	// Insert the todo into the database
+	coll := client.Database("tododb").Collection("todos")
+	ctx := r.Context()
+	_, err = coll.InsertOne(ctx, t)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send the todo as the response
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(t)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
-func (dao *TodoDaoImpl) Update(todo *Todo) error {
-	return errors.New("not implemented yet")
+func getTodo(w http.ResponseWriter, r *http.Request) {
+	// Get the ID from the URL
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	// Get the todo from the database
+	coll := client.Database("tododb").Collection("todos")
+	ctx := r.Context()
+	t := &Todo{}
+	err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(t)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send the todo as the response
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(t)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
-func (dao *TodoDaoImpl) Delete(id string) error {
-	return errors.New("not implemented yet")
+func updateTodo(w http.ResponseWriter, r *http.Request) {
+	// Get the ID from the URL
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	// Parse the request body
+	t := &Todo{}
+	err := json.NewDecoder(r.Body).Decode(t)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Update the todo in the database
+	coll := client.Database("tododb").Collection("todos")
+	ctx := r.Context()
+	_, err = coll.ReplaceOne(ctx, bson.M{"_id": id}, t)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send the todo as the response
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(t)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func deleteTodo(w http.ResponseWriter, r *http.Request) {
+	// Get the ID from the URL
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	// Delete the todo from the database
+	coll := client.Database("tododb").Collection("todos")
+	ctx := r.Context()
+	_, err := coll.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send a success message as the response
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(map[string]string{"message": "success"})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
