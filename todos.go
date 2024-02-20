@@ -40,7 +40,7 @@ func getAllTodos(w http.ResponseWriter, r *http.Request) {
 	// Get all todos from the database
 	coll := client.Database("tododb").Collection("todos")
 	ctx := r.Context()
-	cursor, err := coll.Find(ctx, nil)
+	cursor, err := coll.Find(ctx, bson.M{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -74,6 +74,9 @@ func createTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t.ID = uuid.New().String()
+	now := time.Now()
+	t.CreatedAt = now
+	t.UpdatedAt = now
 
 	// Insert the todo into the database
 	coll := client.Database("tododb").Collection("todos")
