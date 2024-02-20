@@ -62,7 +62,7 @@ const addTodo = () => {
     try {
         adding.value = true;
         // post request to add todo
-        fetch('http://localhost:8080/todos', {
+        fetch('/api/v1/todos', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
